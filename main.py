@@ -1,84 +1,142 @@
-from fastapi import FastAPI, Query
+from fastapi import FastAPI
 from pydantic import BaseModel
-from typing import List
+from urllib.parse import unquote
 
 app = FastAPI(
-    title="NEXVIA Core Engine",
-    description="Step 3: Dynamic Intent Router & Problem Understanding",
+    title="NEXVIA",
     version="0.3.5"
 )
 
-# 1. Structured Understanding Schema (NEXVIA Internal Representation)
-class IntentUnderstanding(BaseModel):
-    primary_intent: str
-    core_problem: str
-    action_needed: str
-    response_mode: List[str]
 
-# 2. Output Response Object
-class RouterResponse(BaseModel):
-    status: str
-    user_input: str
-    understanding: IntentUnderstanding
-    nexvia_intervention: str
+# -----------------------------
+# Request model
+# -----------------------------
+class ChatRequest(BaseModel):
+    message: str
 
-# 3. Intent Router Function (Extracts context -> Map to action)
-def analyze_intent(user_input: str) -> IntentUnderstanding:
-    text = user_input.lower()
-    
-    # Priority Routing Logic (Engine-ready for LLM replacement)
-    if any(w in text for w in ["task", "todo", "start", "overwhelmed", "prioritize", "busy"]):
-        return IntentUnderstanding(
-            primary_intent="PRIORITIZE",
-            core_problem="Overwhelmed by task volume or decision paralysis",
-            action_needed="Guide user to dump tasks via Type, Talk, or Show",
-            response_mode=["TEXT", "VOICE"]
-        )
-    elif any(w in text for w in ["scam", "sms", "link", "real", "fake", "genuine"]):
-        return IntentUnderstanding(
-            primary_intent="CHECK_SECURITY",
-            core_problem="Uncertainty about message authenticity",
-            action_needed="Analyze link or text structure for scam indicators",
-            response_mode=["TEXT"]
-        )
-    elif any(w in text for w in ["compare", "better", "choose", "versus", "vs"]):
-        return IntentUnderstanding(
-            primary_intent="COMPARE",
-            core_problem="Evaluating multiple options for a decision",
-            action_needed="Provide pros/cons breakdown and recommendation",
-            response_mode=["TEXT"]
-        )
-    else:
-        return IntentUnderstanding(
-            primary_intent="UNBURDEN_GENERAL",
-            core_problem="General clutter or mental unburdening request",
-            action_needed="Provide active listening and request clarifying details",
-            response_mode=["TEXT", "VOICE"]
-        )
 
-# 4. Main Input Route: Receive -> Understand -> Classify -> Respond
-@app.get("/chat/text", response_model=RouterResponse)
-def chat_text(message: str = Query(..., description="User raw input")):
-    # STEP 3: Pass raw input into the Router
-    understanding = analyze_intent(message)
-    
-    # Intervention Crafting based on Intent
-    if understanding.primary_intent == "PRIORITIZE":
-        intervention = "Let's sort them out. Send me your tasks — you can type them, speak them, or take a photo. I'll help you decide what to do first."
-    elif understanding.primary_intent == "CHECK_SECURITY":
-        intervention = "Paste the message or send a screenshot of the link here. I'll analyze it for red flags right now."
-    elif understanding.primary_intent == "COMPARE":
-        intervention = "Tell me or show me the options you're weighing. I'll break down the key differences for you."
-    else:
-        intervention = f"I'm listening. Tell me more about what's on your mind regarding: '{message}'."
+# -----------------------------
+# NEXVIA Intent Router
+# -----------------------------
+def detect_intent(message: str):
+    text = message.lower().strip()
 
-    return RouterResponse(
-        status="understood",
-        user_input=message,
-        understanding=understanding,
-        nexvia_intervention=intervention
-    )
+    # CHECK
+    check_words = [
+        "scam",
+        "genuine",
+        "fake",
+        "fraud",
+        "phishing",
+        "suspicious",
+        "verify",
+        "real or fake",
+        "is this genuine",
+        "is this real"
+    ]
 
+    if any(word in text for word in check_words):
+        return "CHECK", 0.95
+
+    # CLEAR / EXPLAIN
+    clear_words = [
+        "what does this mean",
+        "explain",
+        "don't understand",
+        "do not understand",
+        "meaning",
+        "confusing",
+        "what is this",
+        "explain this",
+        "understand this"
+    ]
+
+    if any(word in text for word in clear_words):
+        return "CLEAR", 0.94
+
+    # COMPARE
+    compare_words = [
+        "which is better",
+        "which one",
+        "compare",
+        "cheaper",
+        "best one",
+        "better one",
+        "difference between",
+        "should i buy",
+        "which should i buy"
+    ]
+
+    if any(word in text for word in compare_words):
+        return "COMPARE", 0.94
+
+    # CALCULATE
+    calculate_words = [
+        "calculate",
+        "how much",
+        "average",
+        "percentage",
+        "percent",
+        "total",
+        "profit",
+        "loss",
+        "emi",
+        "interest",
+        "how many"
+    ]
+
+    if any(word in text for word in calculate_words):
+        return "CALCULATE", 0.93
+
+    # IDENTIFY
+    identify_words = [
+        "what is this",
+        "identify",
+        "what device",
+        "what product",
+        "what item",
+        "name this"
+    ]
+
+    if any(word in text for word in identify_words):
+        return "IDENTIFY", 0.92
+
+    # PRIORITIZE
+    prioritize_words = [
+        "too many tasks",
+        "where to start",
+        "what should i do first",
+        "prioritize",
+        "priority",
+        "organize my tasks",
+        "too much work"
+    ]
+
+    if any(word in text for word in prioritize_words):
+        return "PRIORITIZE", 0.92
+
+    # TROUBLESHOOT
+    troubleshoot_words = [
+        "not working",
+        "doesn't work",
+        "does not work",
+        "how do i fix",
+        "fix this",
+        "problem with",
+        "error",
+        "broken"
+    ]
+
+    if any(word in text for word in troubleshoot_words):
+        return "TROUBLESHOOT", 0.91
+
+    # DEFAULT
+    return "GENERAL", 0.60
+
+
+# -----------------------------
+# Home / Health Check
+# -----------------------------
 @app.get("/")
 def home():
     return {
@@ -86,3 +144,78 @@ def home():
         "engine": "NEXVIA Core 0.3.5",
         "stage": "Step 3 - Intent Router Active"
     }
+
+
+# -----------------------------
+# Text Chat Endpoint
+# -----------------------------
+@app.get("/chat/text")
+def chat_text(message: str):
+
+    intent, confidence = detect_intent(message)
+
+    return {
+        "mode": "TYPE",
+        "user_input": message,
+        "intent": intent,
+        "confidence": confidence,
+        "nexvia_response": build_response(intent, message)
+    }
+
+
+# -----------------------------
+# POST Endpoint
+# -----------------------------
+@app.post("/chat")
+def chat(request: ChatRequest):
+
+    intent, confidence = detect_intent(request.message)
+
+    return {
+        "mode": "TYPE",
+        "user_input": request.message,
+        "intent": intent,
+        "confidence": confidence,
+        "nexvia_response": build_response(
+            intent,
+            request.message
+        )
+    }
+
+
+# -----------------------------
+# Basic response generator
+# -----------------------------
+def build_response(intent: str, message: str):
+
+    responses = {
+
+        "CHECK":
+            "I can check this for you. I will identify what needs to be verified and look for supporting information.",
+
+        "CLEAR":
+            "I can explain this in simple language and tell you what it means and what you may need to do.",
+
+        "COMPARE":
+            "I can compare the options and help you understand the important differences.",
+
+        "CALCULATE":
+            "I can calculate this for you and give you the result in a simple format.",
+
+        "IDENTIFY":
+            "I can help identify what you are looking at and explain what it is used for.",
+
+        "PRIORITIZE":
+            "Let's organize the problem and decide what you should deal with first.",
+
+        "TROUBLESHOOT":
+            "Let's identify what is causing the problem and work through the possible solution.",
+
+        "GENERAL":
+            "I understand that you need help. I will work out what kind of problem this is and guide you from there."
+    }
+
+    return responses.get(
+        intent,
+        responses["GENERAL"]
+    )
