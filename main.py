@@ -1,48 +1,44 @@
 from fastapi import FastAPI, Query
+from pydantic import BaseModel
 
 app = FastAPI(
     title="NEXVIA Core Engine",
-    description="Backend API supporting Type, Talk, Show, and Send input modes.",
-    version="0.2.0"
+    description="Step 2 & 3: Receiving and Understanding User Input",
+    version="0.3.0"
 )
+
+# Step 2: Problem Input Schema
+class ProblemRequest(BaseModel):
+    user_problem: str
 
 @app.get("/")
 def home():
     return {
         "status": "online",
         "app": "NEXVIA",
-        "tagline": "Keep your mind uncluttered."
+        "tagline": "Keep your mind uncluttered.",
+        "stage": "Step 2/3 - Active Listening Engaged"
     }
 
-# ⌨️ TYPE
-@app.get("/chat/text")
-def chat_text(message: str = Query(..., description="User text input")):
-    return {
-        "mode": "TYPE",
-        "user_input": message,
-        "nexvia_response": f"I hear you. Let's unburden your mind regarding: '{message}'."
-    }
+# STEP 2 & 3: Receive and Understand Input
+@app.post("/chat/problem")
+def process_problem(data: ProblemRequest):
+    problem = data.user_problem
+    
+    # Simple rule-based understanding for Step 3 stub
+    # (Next stage connects LLM / OpenAI for deep understanding)
+    intent = "general_unburdening"
+    if "stress" in problem.lower() or "overwhelmed" in problem.lower():
+        intent = "emotional_decompress"
+    elif "task" in problem.lower() or "work" in problem.lower() or "todo" in problem.lower():
+        intent = "task_clarification"
 
-# 🎤 TALK
-@app.get("/chat/voice")
-def chat_voice():
     return {
-        "mode": "TALK",
-        "status": "Ready to accept audio stream/file."
-    }
-
-# 📷 SHOW
-@app.get("/chat/vision")
-def chat_vision():
-    return {
-        "mode": "SHOW",
-        "status": "Ready to process images."
-    }
-
-# 🔗 SEND
-@app.get("/chat/document")
-def chat_document():
-    return {
-        "mode": "SEND",
-        "status": "Ready to accept web links or documents."
+        "status": "understood",
+        "step_2_received_input": problem,
+        "step_3_understanding": {
+            "detected_intent": intent,
+            "nexvia_acknowledgment": f"I understand your problem regarding: '{problem}'."
+        },
+        "next_step": "Step 4 - Skill selection pending model integration"
     }
