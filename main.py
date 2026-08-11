@@ -1,27 +1,33 @@
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from urllib.parse import unquote
 
 app = FastAPI(
     title="NEXVIA",
-    version="0.3.5"
+    version="0.4.0"
 )
 
 
-# -----------------------------
-# Request model
-# -----------------------------
+# ============================================================
+# REQUEST MODEL
+# ============================================================
+
 class ChatRequest(BaseModel):
     message: str
 
 
-# -----------------------------
-# NEXVIA Intent Router
-# -----------------------------
+# ============================================================
+# NEXVIA INTENT ROUTER
+# ============================================================
+
 def detect_intent(message: str):
+
     text = message.lower().strip()
 
+    # --------------------------------------------------------
     # CHECK
+    # --------------------------------------------------------
+
     check_words = [
         "scam",
         "genuine",
@@ -38,7 +44,11 @@ def detect_intent(message: str):
     if any(word in text for word in check_words):
         return "CHECK", 0.95
 
+
+    # --------------------------------------------------------
     # CLEAR / EXPLAIN
+    # --------------------------------------------------------
+
     clear_words = [
         "what does this mean",
         "explain",
@@ -54,7 +64,11 @@ def detect_intent(message: str):
     if any(word in text for word in clear_words):
         return "CLEAR", 0.94
 
+
+    # --------------------------------------------------------
     # COMPARE
+    # --------------------------------------------------------
+
     compare_words = [
         "which is better",
         "which one",
@@ -70,7 +84,11 @@ def detect_intent(message: str):
     if any(word in text for word in compare_words):
         return "COMPARE", 0.94
 
+
+    # --------------------------------------------------------
     # CALCULATE
+    # --------------------------------------------------------
+
     calculate_words = [
         "calculate",
         "how much",
@@ -88,7 +106,11 @@ def detect_intent(message: str):
     if any(word in text for word in calculate_words):
         return "CALCULATE", 0.93
 
+
+    # --------------------------------------------------------
     # IDENTIFY
+    # --------------------------------------------------------
+
     identify_words = [
         "what is this",
         "identify",
@@ -101,7 +123,11 @@ def detect_intent(message: str):
     if any(word in text for word in identify_words):
         return "IDENTIFY", 0.92
 
+
+    # --------------------------------------------------------
     # PRIORITIZE
+    # --------------------------------------------------------
+
     prioritize_words = [
         "too many tasks",
         "where to start",
@@ -115,7 +141,11 @@ def detect_intent(message: str):
     if any(word in text for word in prioritize_words):
         return "PRIORITIZE", 0.92
 
+
+    # --------------------------------------------------------
     # TROUBLESHOOT
+    # --------------------------------------------------------
+
     troubleshoot_words = [
         "not working",
         "doesn't work",
@@ -130,62 +160,18 @@ def detect_intent(message: str):
     if any(word in text for word in troubleshoot_words):
         return "TROUBLESHOOT", 0.91
 
+
+    # --------------------------------------------------------
     # DEFAULT
+    # --------------------------------------------------------
+
     return "GENERAL", 0.60
 
 
-# -----------------------------
-# Home / Health Check
-# -----------------------------
-@app.get("/")
-def home():
-    return {
-        "status": "online",
-        "engine": "NEXVIA Core 0.3.5",
-        "stage": "Step 3 - Intent Router Active"
-    }
+# ============================================================
+# NEXVIA RESPONSE GENERATOR
+# ============================================================
 
-
-# -----------------------------
-# Text Chat Endpoint
-# -----------------------------
-@app.get("/chat/text")
-def chat_text(message: str):
-
-    intent, confidence = detect_intent(message)
-
-    return {
-        "mode": "TYPE",
-        "user_input": message,
-        "intent": intent,
-        "confidence": confidence,
-        "nexvia_response": build_response(intent, message)
-    }
-
-
-# -----------------------------
-# POST Endpoint
-# -----------------------------
-@app.post("/chat")
-def chat(request: ChatRequest):
-
-    intent, confidence = detect_intent(request.message)
-
-    return {
-        "mode": "TYPE",
-        "user_input": request.message,
-        "intent": intent,
-        "confidence": confidence,
-        "nexvia_response": build_response(
-            intent,
-            request.message
-        )
-    }
-
-
-# -----------------------------
-# Basic response generator
-# -----------------------------
 def build_response(intent: str, message: str):
 
     responses = {
@@ -219,3 +205,55 @@ def build_response(intent: str, message: str):
         intent,
         responses["GENERAL"]
     )
+
+
+# ============================================================
+# NEXVIA HOME SCREEN
+# ============================================================
+
+@app.get("/")
+def home():
+
+    return FileResponse("index.html")
+
+
+# ============================================================
+# TEXT CHAT
+# ============================================================
+
+@app.get("/chat/text")
+def chat_text(message: str):
+
+    intent, confidence = detect_intent(message)
+
+    return {
+        "mode": "TYPE",
+        "user_input": message,
+        "intent": intent,
+        "confidence": confidence,
+        "nexvia_response": build_response(
+            intent,
+            message
+        )
+    }
+
+
+# ============================================================
+# CHAT POST ENDPOINT
+# ============================================================
+
+@app.post("/chat")
+def chat(request: ChatRequest):
+
+    intent, confidence = detect_intent(request.message)
+
+    return {
+        "mode": "TYPE",
+        "user_input": request.message,
+        "intent": intent,
+        "confidence": confidence,
+        "nexvia_response": build_response(
+            intent,
+            request.message
+        )
+    }
