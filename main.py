@@ -5,7 +5,7 @@ import re
 
 app = FastAPI(
     title="NEXVIA",
-    version="0.5.2"
+    version="0.5.3"
 )
 
 
@@ -23,6 +23,28 @@ class ChatRequest(BaseModel):
 
 def contains_any(text: str, words: list[str]) -> bool:
     return any(word in text for word in words)
+
+
+# ============================================================
+# URL EXTRACTION
+# ============================================================
+
+def extract_urls(message: str):
+
+    pattern = r"https?://[^\s]+|www\.[^\s]+"
+
+    urls = re.findall(pattern, message)
+
+    # Remove common punctuation accidentally captured
+    cleaned_urls = []
+
+    for url in urls:
+
+        url = url.rstrip(".,!?;:)]}\"'")
+
+        cleaned_urls.append(url)
+
+    return list(dict.fromkeys(cleaned_urls))
 
 
 # ============================================================
@@ -144,12 +166,9 @@ def detect_intent(message: str):
     # URL
     # --------------------------------------------------------
 
-    has_url = bool(
-        re.search(
-            r"https?://[^\s]+|www\.[^\s]+",
-            text
-        )
-    )
+    urls = extract_urls(message)
+
+    has_url = len(urls) > 0
 
 
     # --------------------------------------------------------
@@ -167,22 +186,11 @@ def detect_intent(message: str):
     # --------------------------------------------------------
     # CHECK DECISION
     # --------------------------------------------------------
-    #
-    # Strong signals:
-    #
-    # sensitive information
-    # suspicious link
-    # account + threat
-    # money + urgency
-    # money + action
-    # KYC + action
-    #
-    # --------------------------------------------------------
 
     if sensitive_signal:
         return "CHECK", 0.93
 
-    if has_url and action_signal:
+    if has_url:
         return "CHECK", 0.93
 
     if account_signal and threat_signal:
@@ -317,7 +325,7 @@ def detect_intent(message: str):
 
 
 # ============================================================
-# CHECK 1.1 — MESSAGE ANALYSIS
+# CHECK 1.2 — MESSAGE ANALYSIS
 # ============================================================
 
 def analyse_check(message: str):
@@ -325,6 +333,8 @@ def analyse_check(message: str):
     text = message.lower()
 
     warnings = []
+
+    urls = extract_urls(message)
 
 
     # --------------------------------------------------------
@@ -402,11 +412,6 @@ def analyse_check(message: str):
     # LINK
     # --------------------------------------------------------
 
-    urls = re.findall(
-        r"https?://[^\s]+|www\.[^\s]+",
-        message
-    )
-
     if urls:
 
         warnings.append(
@@ -439,7 +444,8 @@ def analyse_check(message: str):
     ]
 
     if contains_any(text, account_words) and contains_any(
-        text, threat_words
+        text,
+        threat_words
     ):
 
         warnings.append(
@@ -535,11 +541,25 @@ def analyse_check(message: str):
         )
 
 
+    # --------------------------------------------------------
+    # URL INFORMATION
+    # --------------------------------------------------------
+
+    url_information = []
+
+    for url in urls:
+
+        url_information.append(
+            "🔗 Link found: " + url
+        )
+
     return {
         "level": level,
         "summary": summary,
         "warnings": warnings,
-        "action": action
+        "action": action,
+        "urls": urls,
+        "url_information": url_information
     }
 
 
@@ -555,6 +575,20 @@ def build_response(intent: str, message: str):
 
         response = result["summary"]
 
+        if result["url_information"]:
+
+            response += "\n\nLink detected:\n"
+
+            for item in result["url_information"]:
+
+                response += item + "\n"
+
+            response += (
+                "\nThis link has been detected, "
+                "but NEXVIA has not yet verified its destination."
+            )
+
+
         if result["warnings"]:
 
             response += "\n\nWhy:\n"
@@ -562,6 +596,7 @@ def build_response(intent: str, message: str):
             for warning in result["warnings"]:
 
                 response += "• " + warning + "\n"
+
 
         response += "\nWhat should I do?\n"
         response += result["action"]
@@ -648,4 +683,4 @@ def chat(request: ChatRequest):
             intent,
             request.message
         )
-    }     
+    }         
