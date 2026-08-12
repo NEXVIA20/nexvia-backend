@@ -3,7 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
     <title>NEXVIA</title>
 
     <style>
@@ -14,9 +13,6 @@
         body {
             margin: 0;
             min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
             font-family: Arial, sans-serif;
             background: #f5f7fa;
             color: #222;
@@ -26,45 +22,44 @@
             width: 100%;
             max-width: 430px;
             min-height: 100vh;
+            margin: auto;
             background: white;
-            padding: 60px 25px 35px;
+            padding: 55px 24px 30px;
             display: flex;
             flex-direction: column;
-            align-items: center;
         }
 
         .logo {
+            text-align: center;
             font-size: 34px;
             font-weight: bold;
             letter-spacing: 3px;
-            margin-bottom: 70px;
+            margin-bottom: 65px;
         }
 
         .question {
-            font-size: 24px;
-            font-weight: 500;
             text-align: center;
-            margin-bottom: 55px;
+            font-size: 24px;
+            margin-bottom: 45px;
         }
 
         .buttons {
-            width: 100%;
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 18px;
+            gap: 16px;
         }
 
         button {
             border: none;
-            background: #f1f3f5;
             border-radius: 18px;
+            background: #f1f3f5;
             padding: 25px 10px;
             font-size: 17px;
             cursor: pointer;
         }
 
         button:hover {
-            background: #e7eaee;
+            background: #e5e7eb;
         }
 
         .icon {
@@ -75,17 +70,88 @@
 
         .tagline {
             margin-top: auto;
-            padding-top: 60px;
-            font-size: 15px;
-            color: #666;
+            padding-top: 50px;
             text-align: center;
+            color: #666;
+            font-size: 15px;
+        }
+
+        .screen {
+            display: none;
+        }
+
+        .screen.active {
+            display: block;
+        }
+
+        .back {
+            background: transparent;
+            padding: 8px;
+            font-size: 15px;
+            text-align: left;
+            margin-bottom: 20px;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 130px;
+            border: 1px solid #ddd;
+            border-radius: 14px;
+            padding: 15px;
+            font-size: 17px;
+            resize: vertical;
+            outline: none;
+        }
+
+        textarea:focus {
+            border-color: #999;
+        }
+
+        .send-button {
+            width: 100%;
+            margin-top: 15px;
+            background: #222;
+            color: white;
+            padding: 16px;
+        }
+
+        .send-button:hover {
+            background: #000;
+        }
+
+        .loading {
+            text-align: center;
+            margin-top: 25px;
+            color: #666;
+        }
+
+        .result {
+            margin-top: 25px;
+            padding: 20px;
+            background: #f5f7fa;
+            border-radius: 16px;
+            line-height: 1.6;
+        }
+
+        .intent {
+            font-size: 13px;
+            color: #777;
+            margin-bottom: 10px;
+        }
+
+        .answer {
+            font-size: 18px;
         }
     </style>
 </head>
 
 <body>
 
-    <div class="app">
+<div class="app">
+
+    <!-- HOME SCREEN -->
+
+    <div id="homeScreen" class="screen active">
 
         <div class="logo">
             NEXVIA
@@ -97,22 +163,22 @@
 
         <div class="buttons">
 
-            <button onclick="talk()">
+            <button onclick="showComingSoon('TALK')">
                 <span class="icon">🎤</span>
                 TALK
             </button>
 
-            <button onclick="showPhoto()">
+            <button onclick="showComingSoon('SHOW')">
                 <span class="icon">📷</span>
                 SHOW
             </button>
 
-            <button onclick="typeProblem()">
+            <button onclick="openType()">
                 <span class="icon">⌨️</span>
                 TYPE
             </button>
 
-            <button onclick="sendLink()">
+            <button onclick="showComingSoon('SEND')">
                 <span class="icon">🔗</span>
                 SEND
             </button>
@@ -125,25 +191,141 @@
 
     </div>
 
-    <script>
 
-        function talk() {
-            alert("TALK will be connected next.");
+    <!-- TYPE SCREEN -->
+
+    <div id="typeScreen" class="screen">
+
+        <button class="back" onclick="goHome()">
+            ← Back
+        </button>
+
+        <div class="logo">
+            NEXVIA
+        </div>
+
+        <div class="question">
+            Tell me what is troubling you.
+        </div>
+
+        <textarea
+            id="problemInput"
+            placeholder="Type your problem here..."
+        ></textarea>
+
+        <button class="send-button" onclick="sendProblem()">
+            SEND
+        </button>
+
+        <div id="loading" class="loading"></div>
+
+        <div id="result" class="result" style="display:none;">
+
+            <div id="intent" class="intent"></div>
+
+            <div id="answer" class="answer"></div>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<script>
+
+    function openType() {
+
+        document.getElementById("homeScreen").classList.remove("active");
+
+        document.getElementById("typeScreen").classList.add("active");
+
+        document.getElementById("problemInput").focus();
+    }
+
+
+    function goHome() {
+
+        document.getElementById("typeScreen").classList.remove("active");
+
+        document.getElementById("homeScreen").classList.add("active");
+
+        document.getElementById("problemInput").value = "";
+
+        document.getElementById("result").style.display = "none";
+
+        document.getElementById("loading").innerText = "";
+    }
+
+
+    async function sendProblem() {
+
+        const input = document.getElementById("problemInput");
+
+        const message = input.value.trim();
+
+        if (!message) {
+
+            alert("Please type your problem first.");
+
+            return;
         }
 
-        function showPhoto() {
-            alert("SHOW will be connected next.");
+        document.getElementById("loading").innerText =
+            "NEXVIA is thinking...";
+
+        document.getElementById("result").style.display = "none";
+
+        try {
+
+            const response = await fetch(
+                "/chat/text?message=" +
+                encodeURIComponent(message)
+            );
+
+            if (!response.ok) {
+
+                throw new Error("Server error");
+
+            }
+
+            const data = await response.json();
+
+            document.getElementById("loading").innerText = "";
+
+            document.getElementById("intent").innerText =
+                "NEXVIA understood this as: " + data.intent;
+
+            document.getElementById("answer").innerText =
+                data.nexvia_response;
+
+            document.getElementById("result").style.display = "block";
+
         }
 
-        function typeProblem() {
-            alert("TYPE will be connected next.");
-        }
+        catch (error) {
 
-        function sendLink() {
-            alert("SEND will be connected next.");
-        }
+            document.getElementById("loading").innerText = "";
 
-    </script>
+            document.getElementById("answer").innerText =
+                "Sorry, NEXVIA could not connect to the server. Please try again.";
+
+            document.getElementById("result").style.display = "block";
+
+        }
+    }
+
+
+    function showComingSoon(feature) {
+
+        alert(
+            feature +
+            " will be connected in the next stage."
+        );
+
+    }
+
+</script>
 
 </body>
 </html>
