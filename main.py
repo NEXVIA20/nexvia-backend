@@ -5,7 +5,7 @@ import re
 
 app = FastAPI(
     title="NEXVIA",
-    version="0.5.0"
+    version="0.5.1"
 )
 
 
@@ -25,7 +25,10 @@ def detect_intent(message: str):
 
     text = message.lower().strip()
 
-    # CHECK
+    # --------------------------------------------------------
+    # EXPLICIT CHECK QUESTIONS
+    # --------------------------------------------------------
+
     check_words = [
         "scam",
         "genuine",
@@ -36,14 +39,80 @@ def detect_intent(message: str):
         "verify",
         "real or fake",
         "is this genuine",
-        "is this real"
+        "is this real",
+        "is this safe",
+        "safe or not",
+        "is this a scam"
     ]
 
     if any(word in text for word in check_words):
         return "CHECK", 0.95
 
 
-    # CLEAR
+    # --------------------------------------------------------
+    # CHECK BY MESSAGE CONTENT
+    # --------------------------------------------------------
+    # A user may simply paste a suspicious message without
+    # asking "is this a scam?"
+
+    suspicious_content_words = [
+        "account will be blocked",
+        "account will be suspended",
+        "account blocked",
+        "account suspended",
+        "kyc expired",
+        "kyc update",
+        "verify your account",
+        "verify immediately",
+        "click this link",
+        "click the link",
+        "click here",
+        "act immediately",
+        "act now",
+        "urgent",
+        "immediately",
+        "last warning",
+        "final warning",
+        "send otp",
+        "share otp",
+        "enter otp",
+        "provide otp",
+        "share your password",
+        "enter your password",
+        "share pin",
+        "enter pin",
+        "card will be blocked",
+        "you have won",
+        "you won",
+        "winner",
+        "lottery",
+        "cash prize",
+        "claim your prize",
+        "claim reward",
+        "free money",
+        "refund"
+    ]
+
+    suspicious_matches = sum(
+        1 for word in suspicious_content_words
+        if word in text
+    )
+
+    has_url = bool(
+        re.search(
+            r"https?://[^\s]+|www\.[^\s]+",
+            text
+        )
+    )
+
+    if suspicious_matches >= 1 or has_url:
+        return "CHECK", 0.90
+
+
+    # --------------------------------------------------------
+    # CLEAR / EXPLAIN
+    # --------------------------------------------------------
+
     clear_words = [
         "what does this mean",
         "explain",
@@ -60,7 +129,10 @@ def detect_intent(message: str):
         return "CLEAR", 0.94
 
 
+    # --------------------------------------------------------
     # COMPARE
+    # --------------------------------------------------------
+
     compare_words = [
         "which is better",
         "which one",
@@ -77,7 +149,10 @@ def detect_intent(message: str):
         return "COMPARE", 0.94
 
 
+    # --------------------------------------------------------
     # CALCULATE
+    # --------------------------------------------------------
+
     calculate_words = [
         "calculate",
         "how much",
@@ -96,7 +171,10 @@ def detect_intent(message: str):
         return "CALCULATE", 0.93
 
 
+    # --------------------------------------------------------
     # IDENTIFY
+    # --------------------------------------------------------
+
     identify_words = [
         "identify",
         "what device",
@@ -109,7 +187,10 @@ def detect_intent(message: str):
         return "IDENTIFY", 0.92
 
 
+    # --------------------------------------------------------
     # PRIORITIZE
+    # --------------------------------------------------------
+
     prioritize_words = [
         "too many tasks",
         "where to start",
@@ -124,7 +205,10 @@ def detect_intent(message: str):
         return "PRIORITIZE", 0.92
 
 
+    # --------------------------------------------------------
     # TROUBLESHOOT
+    # --------------------------------------------------------
+
     troubleshoot_words = [
         "not working",
         "doesn't work",
@@ -140,6 +224,10 @@ def detect_intent(message: str):
         return "TROUBLESHOOT", 0.91
 
 
+    # --------------------------------------------------------
+    # GENERAL
+    # --------------------------------------------------------
+
     return "GENERAL", 0.60
 
 
@@ -153,9 +241,8 @@ def analyse_check(message: str):
 
     warnings = []
 
-    # --------------------------------------------------------
-    # 1. URGENCY
-    # --------------------------------------------------------
+
+    # URGENCY
 
     urgency_words = [
         "urgent",
@@ -176,9 +263,7 @@ def analyse_check(message: str):
         )
 
 
-    # --------------------------------------------------------
-    # 2. OTP / PASSWORD / PIN
-    # --------------------------------------------------------
+    # OTP / PASSWORD / PIN
 
     sensitive_words = [
         "otp",
@@ -197,9 +282,7 @@ def analyse_check(message: str):
         )
 
 
-    # --------------------------------------------------------
-    # 3. MONEY / PRIZE
-    # --------------------------------------------------------
+    # MONEY / PRIZE
 
     money_words = [
         "you won",
@@ -220,9 +303,7 @@ def analyse_check(message: str):
         )
 
 
-    # --------------------------------------------------------
-    # 4. LINK
-    # --------------------------------------------------------
+    # LINK
 
     urls = re.findall(
         r"https?://[^\s]+|www\.[^\s]+",
@@ -236,9 +317,7 @@ def analyse_check(message: str):
         )
 
 
-    # --------------------------------------------------------
-    # 5. ACCOUNT THREAT
-    # --------------------------------------------------------
+    # ACCOUNT / KYC
 
     account_words = [
         "account will be blocked",
@@ -257,9 +336,7 @@ def analyse_check(message: str):
         )
 
 
-    # --------------------------------------------------------
     # RESULT
-    # --------------------------------------------------------
 
     if len(warnings) >= 3:
 
@@ -289,9 +366,7 @@ def analyse_check(message: str):
         )
 
 
-    # --------------------------------------------------------
-    # WHAT TO DO
-    # --------------------------------------------------------
+    # ACTION
 
     if warnings:
 
@@ -338,7 +413,6 @@ def build_response(intent: str, message: str):
 
                 response += "• " + warning + "\n"
 
-
         response += "\nWhat should I do?\n"
         response += result["action"]
 
@@ -376,7 +450,7 @@ def build_response(intent: str, message: str):
 
 
 # ============================================================
-# HOME SCREEN
+# HOME
 # ============================================================
 
 @app.get("/")
