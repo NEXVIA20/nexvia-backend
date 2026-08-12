@@ -1,10 +1,11 @@
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+import re
 
 app = FastAPI(
     title="NEXVIA",
-    version="0.4.0"
+    version="0.5.0"
 )
 
 
@@ -17,17 +18,14 @@ class ChatRequest(BaseModel):
 
 
 # ============================================================
-# NEXVIA INTENT ROUTER
+# INTENT ROUTER
 # ============================================================
 
 def detect_intent(message: str):
 
     text = message.lower().strip()
 
-    # --------------------------------------------------------
     # CHECK
-    # --------------------------------------------------------
-
     check_words = [
         "scam",
         "genuine",
@@ -45,10 +43,7 @@ def detect_intent(message: str):
         return "CHECK", 0.95
 
 
-    # --------------------------------------------------------
-    # CLEAR / EXPLAIN
-    # --------------------------------------------------------
-
+    # CLEAR
     clear_words = [
         "what does this mean",
         "explain",
@@ -65,10 +60,7 @@ def detect_intent(message: str):
         return "CLEAR", 0.94
 
 
-    # --------------------------------------------------------
     # COMPARE
-    # --------------------------------------------------------
-
     compare_words = [
         "which is better",
         "which one",
@@ -85,10 +77,7 @@ def detect_intent(message: str):
         return "COMPARE", 0.94
 
 
-    # --------------------------------------------------------
     # CALCULATE
-    # --------------------------------------------------------
-
     calculate_words = [
         "calculate",
         "how much",
@@ -107,12 +96,8 @@ def detect_intent(message: str):
         return "CALCULATE", 0.93
 
 
-    # --------------------------------------------------------
     # IDENTIFY
-    # --------------------------------------------------------
-
     identify_words = [
-        "what is this",
         "identify",
         "what device",
         "what product",
@@ -124,10 +109,7 @@ def detect_intent(message: str):
         return "IDENTIFY", 0.92
 
 
-    # --------------------------------------------------------
     # PRIORITIZE
-    # --------------------------------------------------------
-
     prioritize_words = [
         "too many tasks",
         "where to start",
@@ -142,10 +124,7 @@ def detect_intent(message: str):
         return "PRIORITIZE", 0.92
 
 
-    # --------------------------------------------------------
     # TROUBLESHOOT
-    # --------------------------------------------------------
-
     troubleshoot_words = [
         "not working",
         "doesn't work",
@@ -161,23 +140,212 @@ def detect_intent(message: str):
         return "TROUBLESHOOT", 0.91
 
 
-    # --------------------------------------------------------
-    # DEFAULT
-    # --------------------------------------------------------
-
     return "GENERAL", 0.60
 
 
 # ============================================================
-# NEXVIA RESPONSE GENERATOR
+# CHECK 1.0 — BASIC MESSAGE ANALYSIS
+# ============================================================
+
+def analyse_check(message: str):
+
+    text = message.lower()
+
+    warnings = []
+
+    # --------------------------------------------------------
+    # 1. URGENCY
+    # --------------------------------------------------------
+
+    urgency_words = [
+        "urgent",
+        "immediately",
+        "immediate",
+        "today",
+        "now",
+        "within 24 hours",
+        "last warning",
+        "final warning",
+        "act now"
+    ]
+
+    if any(word in text for word in urgency_words):
+
+        warnings.append(
+            "The message uses urgent or threatening language."
+        )
+
+
+    # --------------------------------------------------------
+    # 2. OTP / PASSWORD / PIN
+    # --------------------------------------------------------
+
+    sensitive_words = [
+        "otp",
+        "password",
+        "pin",
+        "cvv",
+        "card number",
+        "bank details",
+        "account details"
+    ]
+
+    if any(word in text for word in sensitive_words):
+
+        warnings.append(
+            "The message asks for or mentions sensitive information such as OTP, PIN, password or banking details."
+        )
+
+
+    # --------------------------------------------------------
+    # 3. MONEY / PRIZE
+    # --------------------------------------------------------
+
+    money_words = [
+        "you won",
+        "winner",
+        "lottery",
+        "prize",
+        "cash prize",
+        "reward",
+        "free money",
+        "refund",
+        "claim money"
+    ]
+
+    if any(word in text for word in money_words):
+
+        warnings.append(
+            "The message mentions an unexpected prize, reward, refund or money."
+        )
+
+
+    # --------------------------------------------------------
+    # 4. LINK
+    # --------------------------------------------------------
+
+    urls = re.findall(
+        r"https?://[^\s]+|www\.[^\s]+",
+        message
+    )
+
+    if urls:
+
+        warnings.append(
+            "The message contains a web link. Do not open it until the destination is verified."
+        )
+
+
+    # --------------------------------------------------------
+    # 5. ACCOUNT THREAT
+    # --------------------------------------------------------
+
+    account_words = [
+        "account will be blocked",
+        "account will be closed",
+        "account suspended",
+        "account blocked",
+        "kyc expired",
+        "kyc update",
+        "verify your account"
+    ]
+
+    if any(word in text for word in account_words):
+
+        warnings.append(
+            "The message uses an account-blocking, KYC or verification warning."
+        )
+
+
+    # --------------------------------------------------------
+    # RESULT
+    # --------------------------------------------------------
+
+    if len(warnings) >= 3:
+
+        level = "HIGH"
+
+        summary = (
+            "⚠️ Several warning signs were found. "
+            "Treat this message with caution."
+        )
+
+    elif len(warnings) >= 1:
+
+        level = "MEDIUM"
+
+        summary = (
+            "⚠️ Some warning signs were found. "
+            "Be careful before taking any action."
+        )
+
+    else:
+
+        level = "LOW"
+
+        summary = (
+            "No obvious warning signs were detected "
+            "by this basic check."
+        )
+
+
+    # --------------------------------------------------------
+    # WHAT TO DO
+    # --------------------------------------------------------
+
+    if warnings:
+
+        action = (
+            "Do not click unknown links or share OTP, PIN, "
+            "password or banking information. "
+            "If the message claims to be from a bank or government "
+            "service, verify it through the organisation's official website or phone number."
+        )
+
+    else:
+
+        action = (
+            "No immediate warning signs were detected, "
+            "but this basic check cannot guarantee that a message is genuine."
+        )
+
+
+    return {
+        "level": level,
+        "summary": summary,
+        "warnings": warnings,
+        "action": action
+    }
+
+
+# ============================================================
+# RESPONSE GENERATOR
 # ============================================================
 
 def build_response(intent: str, message: str):
 
-    responses = {
+    if intent == "CHECK":
 
-        "CHECK":
-            "I can check this for you. I will identify what needs to be verified and look for supporting information.",
+        result = analyse_check(message)
+
+        response = result["summary"]
+
+        if result["warnings"]:
+
+            response += "\n\nWhy:\n"
+
+            for warning in result["warnings"]:
+
+                response += "• " + warning + "\n"
+
+
+        response += "\nWhat should I do?\n"
+        response += result["action"]
+
+        return response
+
+
+    responses = {
 
         "CLEAR":
             "I can explain this in simple language and tell you what it means and what you may need to do.",
@@ -208,7 +376,7 @@ def build_response(intent: str, message: str):
 
 
 # ============================================================
-# NEXVIA HOME SCREEN
+# HOME SCREEN
 # ============================================================
 
 @app.get("/")
@@ -239,7 +407,7 @@ def chat_text(message: str):
 
 
 # ============================================================
-# CHAT POST ENDPOINT
+# POST CHAT
 # ============================================================
 
 @app.post("/chat")
