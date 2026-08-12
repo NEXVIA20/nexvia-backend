@@ -5,7 +5,7 @@ import re
 
 app = FastAPI(
     title="NEXVIA",
-    version="0.5.1"
+    version="0.5.2"
 )
 
 
@@ -15,6 +15,14 @@ app = FastAPI(
 
 class ChatRequest(BaseModel):
     message: str
+
+
+# ============================================================
+# HELPER
+# ============================================================
+
+def contains_any(text: str, words: list[str]) -> bool:
+    return any(word in text for word in words)
 
 
 # ============================================================
@@ -29,7 +37,7 @@ def detect_intent(message: str):
     # EXPLICIT CHECK QUESTIONS
     # --------------------------------------------------------
 
-    check_words = [
+    explicit_check_words = [
         "scam",
         "genuine",
         "fake",
@@ -45,58 +53,96 @@ def detect_intent(message: str):
         "is this a scam"
     ]
 
-    if any(word in text for word in check_words):
+    if contains_any(text, explicit_check_words):
         return "CHECK", 0.95
 
 
     # --------------------------------------------------------
-    # CHECK BY MESSAGE CONTENT
+    # WARNING SIGNAL GROUPS
     # --------------------------------------------------------
-    # A user may simply paste a suspicious message without
-    # asking "is this a scam?"
 
-    suspicious_content_words = [
-        "account will be blocked",
-        "account will be suspended",
-        "account blocked",
-        "account suspended",
-        "kyc expired",
-        "kyc update",
-        "verify your account",
-        "verify immediately",
-        "click this link",
-        "click the link",
-        "click here",
-        "act immediately",
-        "act now",
-        "urgent",
-        "immediately",
-        "last warning",
-        "final warning",
-        "send otp",
-        "share otp",
-        "enter otp",
-        "provide otp",
-        "share your password",
-        "enter your password",
-        "share pin",
-        "enter pin",
-        "card will be blocked",
-        "you have won",
-        "you won",
+    money_words = [
+        "won",
         "winner",
+        "prize",
+        "reward",
         "lottery",
-        "cash prize",
-        "claim your prize",
-        "claim reward",
-        "free money",
-        "refund"
+        "cash",
+        "money",
+        "refund",
+        "claim",
+        "bonus",
+        "selected"
     ]
 
-    suspicious_matches = sum(
-        1 for word in suspicious_content_words
-        if word in text
-    )
+    urgency_words = [
+        "urgent",
+        "immediately",
+        "immediate",
+        "today",
+        "now",
+        "within 24 hours",
+        "last warning",
+        "final warning",
+        "act now",
+        "quickly"
+    ]
+
+    account_words = [
+        "account",
+        "bank account",
+        "banking",
+        "card",
+        "kyc",
+        "verification",
+        "customer"
+    ]
+
+    threat_words = [
+        "blocked",
+        "block",
+        "suspended",
+        "suspend",
+        "closed",
+        "close",
+        "deactivated",
+        "deactivate",
+        "expired",
+        "freeze",
+        "frozen",
+        "will be stopped"
+    ]
+
+    sensitive_words = [
+        "otp",
+        "password",
+        "pin",
+        "cvv",
+        "card number",
+        "bank details",
+        "account details",
+        "login details"
+    ]
+
+    action_words = [
+        "click",
+        "open",
+        "tap",
+        "visit",
+        "update",
+        "verify",
+        "confirm",
+        "enter",
+        "send",
+        "share",
+        "provide",
+        "submit"
+    ]
+
+
+    # --------------------------------------------------------
+    # URL
+    # --------------------------------------------------------
 
     has_url = bool(
         re.search(
@@ -105,8 +151,51 @@ def detect_intent(message: str):
         )
     )
 
-    if suspicious_matches >= 1 or has_url:
-        return "CHECK", 0.90
+
+    # --------------------------------------------------------
+    # SIGNAL COUNTS
+    # --------------------------------------------------------
+
+    money_signal = contains_any(text, money_words)
+    urgency_signal = contains_any(text, urgency_words)
+    account_signal = contains_any(text, account_words)
+    threat_signal = contains_any(text, threat_words)
+    sensitive_signal = contains_any(text, sensitive_words)
+    action_signal = contains_any(text, action_words)
+
+
+    # --------------------------------------------------------
+    # CHECK DECISION
+    # --------------------------------------------------------
+    #
+    # Strong signals:
+    #
+    # sensitive information
+    # suspicious link
+    # account + threat
+    # money + urgency
+    # money + action
+    # KYC + action
+    #
+    # --------------------------------------------------------
+
+    if sensitive_signal:
+        return "CHECK", 0.93
+
+    if has_url and action_signal:
+        return "CHECK", 0.93
+
+    if account_signal and threat_signal:
+        return "CHECK", 0.92
+
+    if money_signal and urgency_signal:
+        return "CHECK", 0.92
+
+    if money_signal and action_signal:
+        return "CHECK", 0.91
+
+    if "kyc" in text and action_signal:
+        return "CHECK", 0.92
 
 
     # --------------------------------------------------------
@@ -125,7 +214,7 @@ def detect_intent(message: str):
         "understand this"
     ]
 
-    if any(word in text for word in clear_words):
+    if contains_any(text, clear_words):
         return "CLEAR", 0.94
 
 
@@ -145,7 +234,7 @@ def detect_intent(message: str):
         "which should i buy"
     ]
 
-    if any(word in text for word in compare_words):
+    if contains_any(text, compare_words):
         return "COMPARE", 0.94
 
 
@@ -167,7 +256,7 @@ def detect_intent(message: str):
         "how many"
     ]
 
-    if any(word in text for word in calculate_words):
+    if contains_any(text, calculate_words):
         return "CALCULATE", 0.93
 
 
@@ -183,7 +272,7 @@ def detect_intent(message: str):
         "name this"
     ]
 
-    if any(word in text for word in identify_words):
+    if contains_any(text, identify_words):
         return "IDENTIFY", 0.92
 
 
@@ -201,7 +290,7 @@ def detect_intent(message: str):
         "too much work"
     ]
 
-    if any(word in text for word in prioritize_words):
+    if contains_any(text, prioritize_words):
         return "PRIORITIZE", 0.92
 
 
@@ -220,19 +309,15 @@ def detect_intent(message: str):
         "broken"
     ]
 
-    if any(word in text for word in troubleshoot_words):
+    if contains_any(text, troubleshoot_words):
         return "TROUBLESHOOT", 0.91
 
-
-    # --------------------------------------------------------
-    # GENERAL
-    # --------------------------------------------------------
 
     return "GENERAL", 0.60
 
 
 # ============================================================
-# CHECK 1.0 — BASIC MESSAGE ANALYSIS
+# CHECK 1.1 — MESSAGE ANALYSIS
 # ============================================================
 
 def analyse_check(message: str):
@@ -242,7 +327,9 @@ def analyse_check(message: str):
     warnings = []
 
 
+    # --------------------------------------------------------
     # URGENCY
+    # --------------------------------------------------------
 
     urgency_words = [
         "urgent",
@@ -253,17 +340,20 @@ def analyse_check(message: str):
         "within 24 hours",
         "last warning",
         "final warning",
-        "act now"
+        "act now",
+        "quickly"
     ]
 
-    if any(word in text for word in urgency_words):
+    if contains_any(text, urgency_words):
 
         warnings.append(
-            "The message uses urgent or threatening language."
+            "The message creates urgency or pressure to act quickly."
         )
 
 
-    # OTP / PASSWORD / PIN
+    # --------------------------------------------------------
+    # SENSITIVE INFORMATION
+    # --------------------------------------------------------
 
     sensitive_words = [
         "otp",
@@ -272,38 +362,45 @@ def analyse_check(message: str):
         "cvv",
         "card number",
         "bank details",
-        "account details"
+        "account details",
+        "login details"
     ]
 
-    if any(word in text for word in sensitive_words):
+    if contains_any(text, sensitive_words):
 
         warnings.append(
             "The message asks for or mentions sensitive information such as OTP, PIN, password or banking details."
         )
 
 
+    # --------------------------------------------------------
     # MONEY / PRIZE
+    # --------------------------------------------------------
 
     money_words = [
-        "you won",
+        "won",
         "winner",
-        "lottery",
         "prize",
-        "cash prize",
         "reward",
+        "lottery",
+        "cash prize",
         "free money",
         "refund",
-        "claim money"
+        "bonus",
+        "cash",
+        "claim"
     ]
 
-    if any(word in text for word in money_words):
+    if contains_any(text, money_words):
 
         warnings.append(
-            "The message mentions an unexpected prize, reward, refund or money."
+            "The message mentions money, a prize, reward, refund or unexpected benefit."
         )
 
 
+    # --------------------------------------------------------
     # LINK
+    # --------------------------------------------------------
 
     urls = re.findall(
         r"https?://[^\s]+|www\.[^\s]+",
@@ -317,26 +414,75 @@ def analyse_check(message: str):
         )
 
 
+    # --------------------------------------------------------
     # ACCOUNT / KYC
+    # --------------------------------------------------------
 
     account_words = [
-        "account will be blocked",
-        "account will be closed",
-        "account suspended",
-        "account blocked",
-        "kyc expired",
-        "kyc update",
-        "verify your account"
+        "account",
+        "bank account",
+        "banking",
+        "kyc",
+        "card"
     ]
 
-    if any(word in text for word in account_words):
+    threat_words = [
+        "blocked",
+        "block",
+        "suspended",
+        "suspend",
+        "closed",
+        "deactivated",
+        "expired",
+        "freeze",
+        "frozen"
+    ]
+
+    if contains_any(text, account_words) and contains_any(
+        text, threat_words
+    ):
 
         warnings.append(
-            "The message uses an account-blocking, KYC or verification warning."
+            "The message suggests that an account, card or KYC status may be blocked, suspended, closed or expired."
         )
 
 
-    # RESULT
+    # --------------------------------------------------------
+    # ACTION REQUEST
+    # --------------------------------------------------------
+
+    action_words = [
+        "click",
+        "open",
+        "tap",
+        "visit",
+        "update",
+        "verify",
+        "confirm",
+        "enter",
+        "send",
+        "share",
+        "provide",
+        "submit"
+    ]
+
+    if contains_any(text, action_words):
+
+        warnings.append(
+            "The message asks you to take an immediate action."
+        )
+
+
+    # --------------------------------------------------------
+    # REMOVE DUPLICATES
+    # --------------------------------------------------------
+
+    warnings = list(dict.fromkeys(warnings))
+
+
+    # --------------------------------------------------------
+    # RESULT LEVEL
+    # --------------------------------------------------------
 
     if len(warnings) >= 3:
 
@@ -366,7 +512,9 @@ def analyse_check(message: str):
         )
 
 
+    # --------------------------------------------------------
     # ACTION
+    # --------------------------------------------------------
 
     if warnings:
 
@@ -374,14 +522,16 @@ def analyse_check(message: str):
             "Do not click unknown links or share OTP, PIN, "
             "password or banking information. "
             "If the message claims to be from a bank or government "
-            "service, verify it through the organisation's official website or phone number."
+            "service, verify it through the organisation's official "
+            "website or official phone number."
         )
 
     else:
 
         action = (
             "No immediate warning signs were detected, "
-            "but this basic check cannot guarantee that a message is genuine."
+            "but this basic check cannot guarantee that a message "
+            "is genuine."
         )
 
 
@@ -498,4 +648,4 @@ def chat(request: ChatRequest):
             intent,
             request.message
         )
-    }
+    }     
