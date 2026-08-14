@@ -6,12 +6,12 @@ from urllib.parse import urlparse
 
 
 # ============================================================
-# NEXVIA 0.6.0
+# NEXVIA 0.6.1
 # ============================================================
 
 app = FastAPI(
     title="NEXVIA",
-    version="0.6.0",
+    version="0.6.1",
     description="NEXVIA personal problem understanding and guidance engine."
 )
 
@@ -109,7 +109,6 @@ def analyse_url_structure(url: str):
     for word in caution_words:
 
         if word in domain_parts:
-
             found_words.append(word)
 
     if found_words:
@@ -155,7 +154,7 @@ def analyse_url_structure(url: str):
 
 
 # ============================================================
-# CALCULATOR ENGINE
+# CALCULATOR ENGINE — 0.6.1
 # ============================================================
 
 def calculate_expression(message: str):
@@ -163,10 +162,8 @@ def calculate_expression(message: str):
     text = message.lower().strip()
 
     # --------------------------------------------------------
-    # PERCENTAGE OF NUMBER
-    # Example:
-    # 25% of 800
-    # 25 percent of 800
+    # PERCENTAGE
+    # Example: 25% of 800
     # --------------------------------------------------------
 
     percentage_pattern = (
@@ -202,27 +199,23 @@ def calculate_expression(message: str):
         )
 
     # --------------------------------------------------------
-    # BASIC ARITHMETIC
+    # NORMALISE MATHEMATICAL SYMBOLS
     # --------------------------------------------------------
 
     expression = text
 
-    expression = re.sub(
-        r"^(calculate|compute|what is)\s+",
-        "",
-        expression
-    )
+    # Unicode multiplication signs
+    expression = expression.replace("×", "*")
+    expression = expression.replace("✕", "*")
+    expression = expression.replace("✖", "*")
+    expression = expression.replace("⋅", "*")
+    expression = expression.replace("·", "*")
 
-    expression = expression.replace(
-        "×",
-        "*"
-    )
+    # Unicode division signs
+    expression = expression.replace("÷", "/")
+    expression = expression.replace("∕", "/")
 
-    expression = expression.replace(
-        "÷",
-        "/"
-    )
-
+    # Word operators
     expression = re.sub(
         r"\bplus\b",
         "+",
@@ -242,15 +235,40 @@ def calculate_expression(message: str):
     )
 
     expression = re.sub(
+        r"\bmultiplied by\b",
+        "*",
+        expression
+    )
+
+    expression = re.sub(
         r"\bdivided by\b",
         "/",
         expression
     )
 
+    expression = re.sub(
+        r"\bdivide\b",
+        "/",
+        expression
+    )
+
+    # Remove calculator instruction words
+    expression = re.sub(
+        r"^(calculate|compute|what is)\s+",
+        "",
+        expression
+    )
+
+    expression = expression.strip()
+
+    # --------------------------------------------------------
+    # BASIC TWO-NUMBER CALCULATION
+    # --------------------------------------------------------
+
     match = re.fullmatch(
-        r"\s*(\d+(?:\.\d+)?)\s*"
+        r"(\d+(?:\.\d+)?)\s*"
         r"([+\-*/])\s*"
-        r"(\d+(?:\.\d+)?)\s*",
+        r"(\d+(?:\.\d+)?)",
         expression
     )
 
@@ -292,9 +310,18 @@ def calculate_expression(message: str):
 
         return None
 
+    # Display the original operator where possible
+    original_operator = operator
+
+    if "×" in text or "✕" in text or "✖" in text:
+        original_operator = "×"
+
+    elif "÷" in text or "∕" in text:
+        original_operator = "÷"
+
     return (
         f"{format_number(first)} "
-        f"{operator} "
+        f"{original_operator} "
         f"{format_number(second)} = "
         f"{format_number(result)}"
     )
@@ -450,19 +477,11 @@ def detect_intent(message: str):
 
     # --------------------------------------------------------
     # DIRECT MATHEMATICAL EXPRESSION
-    #
-    # This is the important 0.6.0 fix.
-    #
-    # Examples:
-    # 800 + 250
-    # 800 - 250
-    # 25 × 8
-    # 800 ÷ 4
     # --------------------------------------------------------
 
     math_expression = re.fullmatch(
         r"\s*\d+(?:\.\d+)?\s*"
-        r"(?:[+\-*/×÷])\s*"
+        r"(?:[+\-*/×÷✕✖⋅·∕])\s*"
         r"\d+(?:\.\d+)?\s*",
         text
     )
@@ -738,7 +757,9 @@ def analyse_check(message: str):
             "The message asks you to take an immediate action."
         )
 
-    warnings = list(dict.fromkeys(warnings))
+    warnings = list(
+        dict.fromkeys(warnings)
+    )
 
     # --------------------------------------------------------
     # URL ANALYSIS
