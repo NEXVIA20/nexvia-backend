@@ -6,13 +6,13 @@ from urllib.parse import urlparse
 
 
 # ============================================================
-# NEXVIA 0.6.1
+# NEXVIA 0.7.0
 # ============================================================
 
 app = FastAPI(
     title="NEXVIA",
-    version="0.6.1",
-    description="NEXVIA personal problem understanding and guidance engine."
+    version="0.7.0",
+    description="NEXVIA problem understanding, safety checking and guidance engine."
 )
 
 
@@ -33,7 +33,6 @@ def contains_any(text: str, words: list[str]) -> bool:
 
 
 def format_number(number: float) -> str:
-
     if float(number).is_integer():
         return str(int(number))
 
@@ -154,7 +153,7 @@ def analyse_url_structure(url: str):
 
 
 # ============================================================
-# CALCULATOR ENGINE — 0.6.1
+# CALCULATOR ENGINE
 # ============================================================
 
 def calculate_expression(message: str):
@@ -163,7 +162,6 @@ def calculate_expression(message: str):
 
     # --------------------------------------------------------
     # PERCENTAGE
-    # Example: 25% of 800
     # --------------------------------------------------------
 
     percentage_pattern = (
@@ -199,23 +197,20 @@ def calculate_expression(message: str):
         )
 
     # --------------------------------------------------------
-    # NORMALISE MATHEMATICAL SYMBOLS
+    # NORMALISE OPERATORS
     # --------------------------------------------------------
 
     expression = text
 
-    # Unicode multiplication signs
     expression = expression.replace("×", "*")
     expression = expression.replace("✕", "*")
     expression = expression.replace("✖", "*")
     expression = expression.replace("⋅", "*")
     expression = expression.replace("·", "*")
 
-    # Unicode division signs
     expression = expression.replace("÷", "/")
     expression = expression.replace("∕", "/")
 
-    # Word operators
     expression = re.sub(
         r"\bplus\b",
         "+",
@@ -252,7 +247,6 @@ def calculate_expression(message: str):
         expression
     )
 
-    # Remove calculator instruction words
     expression = re.sub(
         r"^(calculate|compute|what is)\s+",
         "",
@@ -262,7 +256,7 @@ def calculate_expression(message: str):
     expression = expression.strip()
 
     # --------------------------------------------------------
-    # BASIC TWO-NUMBER CALCULATION
+    # TWO NUMBER CALCULATION
     # --------------------------------------------------------
 
     match = re.fullmatch(
@@ -310,13 +304,14 @@ def calculate_expression(message: str):
 
         return None
 
-    # Display the original operator where possible
     original_operator = operator
 
     if "×" in text or "✕" in text or "✖" in text:
+
         original_operator = "×"
 
     elif "÷" in text or "∕" in text:
+
         original_operator = "÷"
 
     return (
@@ -360,7 +355,7 @@ def detect_intent(message: str):
         return "CHECK", 0.95
 
     # --------------------------------------------------------
-    # URL = CHECK
+    # URL
     # --------------------------------------------------------
 
     urls = extract_urls(message)
@@ -476,7 +471,7 @@ def detect_intent(message: str):
         return "CHECK", 0.91
 
     # --------------------------------------------------------
-    # DIRECT MATHEMATICAL EXPRESSION
+    # MATH EXPRESSION
     # --------------------------------------------------------
 
     math_expression = re.fullmatch(
@@ -611,6 +606,222 @@ def detect_intent(message: str):
     # --------------------------------------------------------
 
     return "GENERAL", 0.60
+
+
+# ============================================================
+# RISK SCORING
+# ============================================================
+
+def calculate_risk(message: str):
+
+    text = message.lower()
+
+    score = 0
+
+    reasons = []
+
+    # --------------------------------------------------------
+    # URGENCY
+    # --------------------------------------------------------
+
+    urgency_words = [
+        "urgent",
+        "immediately",
+        "immediate",
+        "today",
+        "now",
+        "within 24 hours",
+        "last warning",
+        "final warning",
+        "act now",
+        "quickly"
+    ]
+
+    if contains_any(text, urgency_words):
+
+        score += 1
+
+        reasons.append(
+            "Urgent pressure to act quickly."
+        )
+
+    # --------------------------------------------------------
+    # SENSITIVE INFORMATION
+    # --------------------------------------------------------
+
+    sensitive_words = [
+        "otp",
+        "password",
+        "pin",
+        "cvv",
+        "card number",
+        "bank details",
+        "account details",
+        "login details"
+    ]
+
+    if contains_any(text, sensitive_words):
+
+        score += 2
+
+        reasons.append(
+            "Requests or mentions sensitive information."
+        )
+
+    # --------------------------------------------------------
+    # ACCOUNT THREAT
+    # --------------------------------------------------------
+
+    account_words = [
+        "account",
+        "bank account",
+        "banking",
+        "card",
+        "kyc",
+        "verification"
+    ]
+
+    threat_words = [
+        "blocked",
+        "block",
+        "suspended",
+        "suspend",
+        "closed",
+        "deactivated",
+        "expired",
+        "freeze",
+        "frozen"
+    ]
+
+    if (
+        contains_any(text, account_words)
+        and contains_any(text, threat_words)
+    ):
+
+        score += 2
+
+        reasons.append(
+            "Threatens account, card or KYC suspension, "
+            "blocking or closure."
+        )
+
+    # --------------------------------------------------------
+    # MONEY / PRIZE
+    # --------------------------------------------------------
+
+    money_words = [
+        "won",
+        "winner",
+        "prize",
+        "reward",
+        "lottery",
+        "cash prize",
+        "free money",
+        "refund",
+        "bonus",
+        "claim"
+    ]
+
+    if contains_any(text, money_words):
+
+        score += 1
+
+        reasons.append(
+            "Mentions a prize, reward, refund or unexpected benefit."
+        )
+
+    # --------------------------------------------------------
+    # ACTION REQUEST
+    # --------------------------------------------------------
+
+    action_words = [
+        "click",
+        "open",
+        "tap",
+        "visit",
+        "update",
+        "verify",
+        "confirm",
+        "enter",
+        "send",
+        "share",
+        "provide",
+        "submit"
+    ]
+
+    if contains_any(text, action_words):
+
+        score += 1
+
+        reasons.append(
+            "Requests an immediate action."
+        )
+
+    # --------------------------------------------------------
+    # URL SIGNALS
+    # --------------------------------------------------------
+
+    urls = extract_urls(message)
+
+    url_results = []
+
+    for url in urls:
+
+        result = analyse_url_structure(url)
+
+        url_results.append(result)
+
+        if result["signals"]:
+
+            score += min(
+                len(result["signals"]),
+                2
+            )
+
+            reasons.append(
+                "The URL contains structural signals "
+                "that deserve caution."
+            )
+
+    reasons = list(
+        dict.fromkeys(reasons)
+    )
+
+    # --------------------------------------------------------
+    # RISK LEVEL
+    # --------------------------------------------------------
+
+    if score >= 5:
+
+        level = "VERY HIGH"
+
+        icon = "🔴"
+
+    elif score >= 3:
+
+        level = "HIGH"
+
+        icon = "🟠"
+
+    elif score >= 1:
+
+        level = "CAUTION"
+
+        icon = "🟡"
+
+    else:
+
+        level = "LOW"
+
+        icon = "🟢"
+
+    return {
+        "score": score,
+        "level": level,
+        "icon": icon,
+        "reasons": reasons,
+        "urls": url_results
+    }
 
 
 # ============================================================
@@ -854,7 +1065,25 @@ def build_response(intent: str, message: str):
 
         result = analyse_check(message)
 
+        risk = calculate_risk(message)
+
         response = result["summary"]
+
+        # ----------------------------------------------------
+        # RISK LEVEL
+        # ----------------------------------------------------
+
+        response += (
+            "\n\n"
+            + risk["icon"]
+            + " Risk level: "
+            + risk["level"]
+        )
+
+        response += (
+            "\nRisk score: "
+            + str(risk["score"])
+        )
 
         # ----------------------------------------------------
         # LINK
@@ -923,6 +1152,21 @@ def build_response(intent: str, message: str):
                 response += (
                     "\n• "
                     + warning
+                )
+
+        # ----------------------------------------------------
+        # RISK REASONS
+        # ----------------------------------------------------
+
+        if risk["reasons"]:
+
+            response += "\n\nRisk factors:"
+
+            for reason in risk["reasons"]:
+
+                response += (
+                    "\n• "
+                    + reason
                 )
 
         # ----------------------------------------------------
@@ -1052,6 +1296,11 @@ def chat_text(message: str):
         "user_input": message,
         "intent": intent,
         "confidence": confidence,
+        "risk": (
+            calculate_risk(message)
+            if intent == "CHECK"
+            else None
+        ),
         "nexvia_response": build_response(
             intent,
             message
@@ -1075,6 +1324,11 @@ def chat(request: ChatRequest):
         "user_input": request.message,
         "intent": intent,
         "confidence": confidence,
+        "risk": (
+            calculate_risk(request.message)
+            if intent == "CHECK"
+            else None
+        ),
         "nexvia_response": build_response(
             intent,
             request.message
