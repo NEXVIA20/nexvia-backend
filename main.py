@@ -6,7 +6,7 @@ from urllib.parse import urlparse
 
 app = FastAPI(
     title="NEXVIA",
-    version="0.5.4"
+    version="0.5.5"
 )
 
 
@@ -95,7 +95,6 @@ def analyse_url_structure(url: str):
             found_words.append(word)
 
     if found_words:
-
         signals.append(
             "The domain contains terms commonly associated with "
             "login, verification, banking or account activity: "
@@ -103,27 +102,23 @@ def analyse_url_structure(url: str):
         )
 
     if "@" in original_url:
-
         signals.append(
             "The URL contains an '@' character, which can be used "
             "to disguise the actual destination."
         )
 
     if len(domain) > 50:
-
         signals.append(
             "The domain name is unusually long."
         )
 
     if domain.count("-") >= 3:
-
         signals.append(
             "The domain contains several hyphens, which can sometimes "
             "be seen in impersonation-style domains."
         )
 
     if scheme == "http":
-
         signals.append(
             "The link does not use HTTPS."
         )
@@ -144,6 +139,10 @@ def detect_intent(message: str):
 
     text = message.lower().strip()
 
+    # --------------------------------------------------------
+    # EXPLICIT CHECK
+    # --------------------------------------------------------
+
     explicit_check_words = [
         "scam",
         "genuine",
@@ -162,6 +161,10 @@ def detect_intent(message: str):
 
     if contains_any(text, explicit_check_words):
         return "CHECK", 0.95
+
+    # --------------------------------------------------------
+    # WARNING SIGNALS
+    # --------------------------------------------------------
 
     money_words = [
         "won",
@@ -270,6 +273,10 @@ def detect_intent(message: str):
     if "kyc" in text and action_signal:
         return "CHECK", 0.92
 
+    # --------------------------------------------------------
+    # CLEAR / EXPLAIN
+    # --------------------------------------------------------
+
     clear_words = [
         "what does this mean",
         "explain",
@@ -285,6 +292,10 @@ def detect_intent(message: str):
     if contains_any(text, clear_words):
         return "CLEAR", 0.94
 
+    # --------------------------------------------------------
+    # COMPARE
+    # --------------------------------------------------------
+
     compare_words = [
         "which is better",
         "which one",
@@ -299,6 +310,10 @@ def detect_intent(message: str):
 
     if contains_any(text, compare_words):
         return "COMPARE", 0.94
+
+    # --------------------------------------------------------
+    # CALCULATE
+    # --------------------------------------------------------
 
     calculate_words = [
         "calculate",
@@ -317,6 +332,10 @@ def detect_intent(message: str):
     if contains_any(text, calculate_words):
         return "CALCULATE", 0.93
 
+    # --------------------------------------------------------
+    # IDENTIFY
+    # --------------------------------------------------------
+
     identify_words = [
         "identify",
         "what device",
@@ -327,6 +346,10 @@ def detect_intent(message: str):
 
     if contains_any(text, identify_words):
         return "IDENTIFY", 0.92
+
+    # --------------------------------------------------------
+    # PRIORITIZE
+    # --------------------------------------------------------
 
     prioritize_words = [
         "too many tasks",
@@ -340,6 +363,10 @@ def detect_intent(message: str):
 
     if contains_any(text, prioritize_words):
         return "PRIORITIZE", 0.92
+
+    # --------------------------------------------------------
+    # TROUBLESHOOT
+    # --------------------------------------------------------
 
     troubleshoot_words = [
         "not working",
@@ -355,6 +382,10 @@ def detect_intent(message: str):
     if contains_any(text, troubleshoot_words):
         return "TROUBLESHOOT", 0.91
 
+    # --------------------------------------------------------
+    # DEFAULT
+    # --------------------------------------------------------
+
     return "GENERAL", 0.60
 
 
@@ -366,7 +397,7 @@ def analyse_check(message: str):
 
     text = message.lower()
 
-    warnings = []
+    message_warnings = []
 
     urls = extract_urls(message)
 
@@ -388,8 +419,7 @@ def analyse_check(message: str):
     ]
 
     if contains_any(text, urgency_words):
-
-        warnings.append(
+        message_warnings.append(
             "The message creates urgency or pressure to act quickly."
         )
 
@@ -409,8 +439,7 @@ def analyse_check(message: str):
     ]
 
     if contains_any(text, sensitive_words):
-
-        warnings.append(
+        message_warnings.append(
             "The message asks for or mentions sensitive information "
             "such as OTP, PIN, password or banking details."
         )
@@ -434,8 +463,7 @@ def analyse_check(message: str):
     ]
 
     if contains_any(text, money_words):
-
-        warnings.append(
+        message_warnings.append(
             "The message mentions money, a prize, reward, refund "
             "or unexpected benefit."
         )
@@ -464,12 +492,11 @@ def analyse_check(message: str):
         "frozen"
     ]
 
-    if contains_any(text, account_words) and contains_any(
-        text,
-        threat_words
+    if (
+        contains_any(text, account_words)
+        and contains_any(text, threat_words)
     ):
-
-        warnings.append(
+        message_warnings.append(
             "The message suggests that an account, card or KYC status "
             "may be blocked, suspended, closed or expired."
         )
@@ -494,34 +521,39 @@ def analyse_check(message: str):
     ]
 
     if contains_any(text, action_words):
-
-        warnings.append(
+        message_warnings.append(
             "The message asks you to take an immediate action."
         )
 
+    message_warnings = list(dict.fromkeys(message_warnings))
+
     # --------------------------------------------------------
-    # URL STRUCTURE
+    # URL ANALYSIS
     # --------------------------------------------------------
 
     url_analysis = []
 
     for url in urls:
+        url_analysis.append(
+            analyse_url_structure(url)
+        )
 
-        analysis = analyse_url_structure(url)
+    # --------------------------------------------------------
+    # WARNING COUNT
+    # --------------------------------------------------------
 
-        url_analysis.append(analysis)
+    total_warning_count = len(message_warnings)
 
-        for signal in analysis["signals"]:
-
-            warnings.append(signal)
-
-    warnings = list(dict.fromkeys(warnings))
+    for analysis in url_analysis:
+        total_warning_count += len(
+            analysis["signals"]
+        )
 
     # --------------------------------------------------------
     # RESULT LEVEL
     # --------------------------------------------------------
 
-    if len(warnings) >= 3:
+    if total_warning_count >= 3:
 
         level = "HIGH"
 
@@ -530,7 +562,7 @@ def analyse_check(message: str):
             "Treat this message with caution."
         )
 
-    elif len(warnings) >= 1:
+    elif total_warning_count >= 1:
 
         level = "MEDIUM"
 
@@ -552,7 +584,7 @@ def analyse_check(message: str):
     # ACTION
     # --------------------------------------------------------
 
-    if warnings:
+    if total_warning_count > 0:
 
         action = (
             "Do not click unknown links or share OTP, PIN, "
@@ -573,7 +605,7 @@ def analyse_check(message: str):
     return {
         "level": level,
         "summary": summary,
-        "warnings": warnings,
+        "message_warnings": message_warnings,
         "action": action,
         "urls": urls,
         "url_analysis": url_analysis
@@ -586,11 +618,19 @@ def analyse_check(message: str):
 
 def build_response(intent: str, message: str):
 
+    # ========================================================
+    # CHECK
+    # ========================================================
+
     if intent == "CHECK":
 
         result = analyse_check(message)
 
         response = result["summary"]
+
+        # ----------------------------------------------------
+        # LINK SECTION
+        # ----------------------------------------------------
 
         if result["url_analysis"]:
 
@@ -599,7 +639,7 @@ def build_response(intent: str, message: str):
             for analysis in result["url_analysis"]:
 
                 response += (
-                    "\n\nURL: "
+                    "\nURL: "
                     + analysis["url"]
                 )
 
@@ -636,18 +676,30 @@ def build_response(intent: str, message: str):
                 "It does not confirm that the website is trustworthy."
             )
 
-        if result["warnings"]:
+        # ----------------------------------------------------
+        # MESSAGE WARNINGS ONLY
+        # ----------------------------------------------------
+
+        if result["message_warnings"]:
 
             response += "\n\nWhy:"
 
-            for warning in result["warnings"]:
+            for warning in result["message_warnings"]:
 
                 response += "\n• " + warning
+
+        # ----------------------------------------------------
+        # ACTION
+        # ----------------------------------------------------
 
         response += "\n\nWhat should I do?\n"
         response += result["action"]
 
         return response
+
+    # ========================================================
+    # OTHER INTENTS
+    # ========================================================
 
     responses = {
 
@@ -685,12 +737,11 @@ def build_response(intent: str, message: str):
 
 @app.get("/")
 def home():
-
     return FileResponse("index.html")
 
 
 # ============================================================
-# TEXT CHAT
+# GET TEXT CHAT
 # ============================================================
 
 @app.get("/chat/text")
